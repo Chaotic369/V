@@ -162,8 +162,11 @@
   .controls {
     pointer-events: auto;
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
+    max-width: 340px;
+    margin: 0 auto;
   }
 
   .mode-btn {
@@ -218,6 +221,8 @@
       <button class="mode-btn active" data-mode="orb">ORB</button>
       <button class="mode-btn" data-mode="lattice">LATTICE</button>
       <button class="mode-btn" data-mode="strands">STRANDS</button>
+      <button class="mode-btn" data-mode="bars">BARS</button>
+      <button class="mode-btn" data-mode="tunnel">TUNNEL</button>
     </div>
   </div>
 </div>
@@ -424,6 +429,46 @@
   strandsGroup.visible = false;
   scene.add(strandsGroup);
 
+  // ---- BARS: classic circular frequency spectrum (Winamp-style) ----
+  const barsGroup = new THREE.Group();
+  const BAR_COUNT = 64;
+  const barMeshes = [];
+  const barBoxGeo = new THREE.BoxGeometry(0.14, 1, 0.14);
+  for (let b = 0; b < BAR_COUNT; b++) {
+    const hue = 0.95 - (b / BAR_COUNT) * 0.55;
+    const color = new THREE.Color().setHSL(hue, 0.85, 0.55);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+    const bar = new THREE.Mesh(barBoxGeo, mat);
+    const theta = (b / BAR_COUNT) * Math.PI * 2;
+    const radius = 3;
+    bar.position.set(Math.cos(theta) * radius, 0, Math.sin(theta) * radius);
+    bar.lookAt(0, 0, 0);
+    barsGroup.add(bar);
+    barMeshes.push({ mesh: bar, theta });
+  }
+  barsGroup.visible = false;
+  scene.add(barsGroup);
+
+  // ---- TUNNEL: pulsing concentric rings rushing toward camera ----
+  const tunnelGroup = new THREE.Group();
+  const TUNNEL_RINGS = 24;
+  const TUNNEL_SEGMENTS = 48;
+  const tunnelRings = [];
+  for (let r = 0; r < TUNNEL_RINGS; r++) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array((TUNNEL_SEGMENTS + 1) * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const hue = 0.55 + (r / TUNNEL_RINGS) * 0.4;
+    const color = new THREE.Color().setHSL(hue % 1, 0.8, 0.6);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+    const ring = new THREE.LineLoop(geo, mat);
+    ring.userData.baseZ = -r * 1.4;
+    tunnelGroup.add(ring);
+    tunnelRings.push(ring);
+  }
+  tunnelGroup.visible = false;
+  scene.add(tunnelGroup);
+
   // ---------------------------------------------------------------------
   // Interaction: drag to rotate, tap buttons to switch forms
   // ---------------------------------------------------------------------
@@ -439,6 +484,8 @@
     orbGroup.visible = mode === 'orb';
     latticeGroup.visible = mode === 'lattice';
     strandsGroup.visible = mode === 'strands';
+    barsGroup.visible = mode === 'bars';
+    tunnelGroup.visible = mode === 'tunnel';
     document.querySelectorAll('.mode-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
@@ -623,6 +670,65 @@
         posAttr.needsUpdate = true;
         line.material.color.copy(energyColor).lerp(new THREE.Color(0xffffff), 0.15 * (s / STRAND_COUNT));
         line.material.opacity = 0.35 + overall * 0.5;
+      }
+    }
+
+    // ---- BARS ----
+    if (mode === 'bars') {
+      barsGroup.rotation.y = rotY;
+      barsGroup.rotation.x = rotX * 0.4;
+
+      const bins = dataFreq ? dataFreq.length : 0;
+      for (let b = 0; b < BAR_COUNT; b++) {
+        const { mesh, theta } = barMeshes[b];
+        let freqVal = 0;
+        if (dataFreq && bins) {
+          const bin = Math.floor((b / BAR_COUNT) * bins * 0.5);
+          freqVal = dataFreq[bin] / 255;
+        }
+        const height = 0.15 + freqVal * 4.5;
+        mesh.scale.y = height;
+        const radius = 3;
+        mesh.position.set(Math.cos(theta) * radius, (height * 1) / 2 - 0.5, Math.sin(theta) * radius);
+        const hue = 0.95 - (b / BAR_COUNT) * 0.55;
+        mesh.material.color.setHSL(hue, 0.85, 0.4 + freqVal * 0.35);
+        mesh.material.opacity = 0.75 + freqVal * 0.25;
+      }
+    }
+
+    // ---- TUNNEL ----
+    if (mode === 'tunnel') {
+      tunnelGroup.rotation.z = t * 0.15;
+      tunnelGroup.rotation.x = rotX * 0.3;
+      tunnelGroup.rotation.y = rotY * 0.3;
+
+      const speed = 3 + overall * 6;
+      for (let r = 0; r < TUNNEL_RINGS; r++) {
+        const ring = tunnelRings[r];
+        let z = ring.userData.baseZ + t * speed;
+        z = ((z % (TUNNEL_RINGS * 1.4)) + TUNNEL_RINGS * 1.4) % (TUNNEL_RINGS * 1.4);
+        z = z - TUNNEL_RINGS * 1.4;
+        const depthFactor = 1 - Math.abs(z) / (TUNNEL_RINGS * 1.4);
+
+        const posAttr = ring.geometry.attributes.position;
+        const arr = posAttr.array;
+        const bins = dataFreq ? dataFreq.length : 0;
+        for (let seg = 0; seg <= TUNNEL_SEGMENTS; seg++) {
+          const f = seg / TUNNEL_SEGMENTS;
+          const ang = f * Math.PI * 2;
+          let freqVal = 0;
+          if (dataFreq && bins) {
+            const bin = Math.floor(f * bins * 0.5);
+            freqVal = dataFreq[bin] / 255;
+          }
+          const baseRadius = 1.6 + bass * 1.2;
+          const radius = baseRadius + freqVal * 1.1 + Math.sin(ang * 6 + t * 2) * mid * 0.3;
+          arr[seg * 3] = Math.cos(ang) * radius;
+          arr[seg * 3 + 1] = Math.sin(ang) * radius;
+          arr[seg * 3 + 2] = z;
+        }
+        posAttr.needsUpdate = true;
+        ring.material.opacity = 0.15 + depthFactor * 0.75 + treble * 0.2;
       }
     }
 
