@@ -20,31 +20,31 @@
         }
 
         #start-btn {
-            background: linear-gradient(45deg, #1e3a8a, #4c1d95); /* Blue to Deep Purple */
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-            margin-bottom: 20px;
-            z-index: 10;
-        }
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: linear-gradient(45deg, #1e3a8a, #4c1d95); /* Blue to Deep Purple */
+                    color: white;
+                    border: none;
+                    padding: 15px 30px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+                    z-index: 10;
+                }
 
-        #start-btn:active {
-            transform: scale(0.98);
-        }
+                #start-btn:active {
+                    transform: translate(-50%, -50%) scale(0.98);
+                }
 
-        canvas {
-            width: 90%;
-            max-width: 600px;
-            height: 300px;
-            background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 12px;
-            box-shadow: 0 0 20px rgba(76, 29, 149, 0.3);
-        }
+                canvas {
+                    width: 100vw;
+                    height: 100vh;
+                    display: block;
+                }
     </style>
 </head>
 <body>
@@ -71,9 +71,14 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
                 // Hide button after starting
-                startBtn.style.display = 'none';
+                                startBtn.style.display = 'none';
 
-                // Initialize Audio Context (must be done after a user gesture like a click)
+                                // Request actual fullscreen mode
+                                if (document.documentElement.requestFullscreen) {
+                                    document.documentElement.requestFullscreen().catch(err => console.warn("Fullscreen denied:", err));
+                                }
+
+                                // Initialize Audio Context (must be done after a user gesture like a click)
                                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                                 analyser = audioContext.createAnalyser();
                 
