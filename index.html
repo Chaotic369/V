@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000432;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #start-btn {
+            background: linear-gradient(45deg, #1e3a8a, #4c1d95); /* Blue to Deep Purple */
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            margin-bottom: 20px;
+            z-index: 10;
+        }
+
+        #start-btn:active {
+            transform: scale(0.98);
+        }
+
+        canvas {
+            width: 90%;
+            max-width: 600px;
+            height: 300px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(76, 29, 149, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <button id="start-btn">Start Visualizer</button>
+    <canvas id="visualizer"></canvas>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas resolution
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+
+        let audioContext;
+        let analyser;
+        let dataArray;
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Hide button after starting
+                startBtn.style.display = 'none';
+
+                // Initialize Audio Context (must be done after a user gesture like a click)
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                
+                // Configure analyser
+                analyser.fftSize = 256; 
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+
+                drawVisualizer(bufferLength);
+
+            } catch (err) {
+                alert("Microphone access is required for the visualizer to work.");
+                console.error("Error accessing microphone:", err);
+            }
+        });
+
+        function drawVisualizer(bufferLength) {
+            requestAnimationFrame(() => drawVisualizer(bufferLength));
+
+            analyser.getByteFrequencyData(dataArray);
+
+            ctx.fillStyle = '#000432';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i];
+
+                // Create a blue to deep purple gradient effect based on height
+                const r = barHeight + (25 * (i/bufferLength));
+                const g = 50;
+                const b = 200 + (55 * (i/bufferLength));
+
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                
+                // Draw the bar centered vertically
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        });
+    </script>
+
+</body>
+</html>
