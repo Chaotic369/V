@@ -1,179 +1,668 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Visualizer</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000432;
-            color: white;
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-        }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Resonance</title>
+<style>
+  :root {
+    --void: #08080c;
+    --void-2: #0e0e16;
+    --ember: #ff3d5a;
+    --plasma: #5df5ff;
+    --white-hot: #ffffff;
+    --dim: #6a6a80;
+    --line: #1c1c28;
+  }
 
-        #start-btn {
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    background: linear-gradient(45deg, #1e3a8a, #4c1d95); /* Blue to Deep Purple */
-                    color: white;
-                    border: none;
-                    padding: 15px 30px;
-                    font-size: 18px;
-                    font-weight: bold;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-                    z-index: 10;
-                }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-                #start-btn:active {
-                    transform: translate(-50%, -50%) scale(0.98);
-                }
+  html, body {
+    background: var(--void);
+    color: #e8e8f0;
+    font-family: 'Courier New', ui-monospace, monospace;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+  }
 
-                canvas {
-                    width: 100vw;
-                    height: 100vh;
-                    display: block;
-                }
-    </style>
+  #stage {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  canvas { display: block; }
+
+  /* ---- Overlay UI ---- */
+  .hud {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .brand {
+    font-size: 11px;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--dim);
+    line-height: 1.6;
+  }
+  .brand b {
+    display: block;
+    color: #e8e8f0;
+    font-size: 15px;
+    letter-spacing: 0.18em;
+    font-weight: 400;
+  }
+
+  .readout {
+    text-align: right;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--dim);
+    line-height: 1.8;
+  }
+  .readout span { color: var(--plasma); }
+
+  /* ---- Start screen ---- */
+  #gate {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: var(--void);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 28px;
+    padding: 24px;
+    text-align: center;
+    transition: opacity 0.6s ease, visibility 0.6s;
+  }
+  #gate.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .gate-mark {
+    width: 64px;
+    height: 64px;
+    position: relative;
+  }
+  .gate-mark svg { width: 100%; height: 100%; }
+  .gate-ring {
+    fill: none;
+    stroke: var(--ember);
+    stroke-width: 1;
+    opacity: 0.8;
+    animation: spin 6s linear infinite;
+    transform-origin: center;
+  }
+  .gate-ring.b { stroke: var(--plasma); animation-duration: 9s; animation-direction: reverse; opacity: 0.5; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .gate-title {
+    font-size: 13px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .gate-title b { display: block; color: #f2f2f8; font-size: 22px; letter-spacing: 0.2em; margin-top: 8px; font-weight: 400; }
+
+  .gate-copy {
+    max-width: 300px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--dim);
+    letter-spacing: 0.02em;
+  }
+
+  #enable {
+    pointer-events: auto;
+    background: transparent;
+    border: 1px solid var(--ember);
+    color: #ffdfe4;
+    padding: 14px 36px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+    border-radius: 2px;
+  }
+  #enable:active {
+    background: var(--ember);
+    color: var(--void);
+    box-shadow: 0 0 30px rgba(255, 61, 90, 0.5);
+  }
+
+  .gate-error {
+    max-width: 300px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--ember);
+    display: none;
+  }
+  .gate-error.show { display: block; }
+
+  /* ---- Bottom controls ---- */
+  .controls {
+    pointer-events: auto;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .mode-btn {
+    background: rgba(20, 20, 30, 0.55);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--line);
+    color: var(--dim);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    border-radius: 20px;
+    transition: all 0.25s;
+  }
+  .mode-btn.active {
+    color: var(--void);
+    background: var(--plasma);
+    border-color: var(--plasma);
+  }
+
+  .hint {
+    position: fixed;
+    bottom: 78px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--dim);
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+</style>
 </head>
 <body>
 
-    <button id="start-btn">Start Visualizer</button>
-    <canvas id="visualizer"></canvas>
+<div id="stage"></div>
 
-    <script>
-        const startBtn = document.getElementById('start-btn');
-        const canvas = document.getElementById('visualizer');
-        const ctx = canvas.getContext('2d');
+<div class="hud">
+  <div class="hud-top">
+    <div class="brand">SIGNAL<b>RESONANCE</b></div>
+    <div class="readout">
+      GAIN <span id="r-gain">0.00</span><br/>
+      PEAK <span id="r-peak">0 Hz</span><br/>
+      STATE <span id="r-state">LIVE</span>
+    </div>
+  </div>
+  <div>
+    <div class="hint" id="hint">tap a form to switch &nbsp;·&nbsp; drag to rotate</div>
+    <div class="controls">
+      <button class="mode-btn active" data-mode="orb">ORB</button>
+      <button class="mode-btn" data-mode="lattice">LATTICE</button>
+      <button class="mode-btn" data-mode="strands">STRANDS</button>
+    </div>
+  </div>
+</div>
 
-        // Set canvas resolution
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+<div id="gate">
+  <div class="gate-mark">
+    <svg viewBox="0 0 64 64">
+      <circle class="gate-ring" cx="32" cy="32" r="26"/>
+      <circle class="gate-ring b" cx="32" cy="32" r="18"/>
+    </svg>
+  </div>
+  <div class="gate-title">A THREE.JS INSTRUMENT<b>RESONANCE</b></div>
+  <div class="gate-copy">
+    A form that listens. Point your phone's microphone at whatever's playing &mdash; music, voice, room noise &mdash; and it becomes geometry in real time.
+  </div>
+  <button id="enable">Begin Listening</button>
+  <div class="gate-error" id="gate-error"></div>
+</div>
 
-        let audioContext;
-        let analyser;
-        let dataArray;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function() {
+  "use strict";
 
-        startBtn.addEventListener('click', async () => {
-            try {
-                // Request microphone access
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
-                // Hide button after starting
-                                startBtn.style.display = 'none';
+  // ---------------------------------------------------------------------
+  // Audio engine
+  // ---------------------------------------------------------------------
+  let audioCtx, analyser, dataFreq, dataTime, sourceNode;
+  const FFT_SIZE = 2048;
+  let smoothedBass = 0, smoothedMid = 0, smoothedTreble = 0, smoothedOverall = 0;
 
-                                // Request actual fullscreen mode
-                                if (document.documentElement.requestFullscreen) {
-                                    document.documentElement.requestFullscreen().catch(err => console.warn("Fullscreen denied:", err));
-                                }
+  async function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      }
+    });
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.75;
+    sourceNode.connect(analyser);
 
-                                // Initialize Audio Context (must be done after a user gesture like a click)
-                                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                                analyser = audioContext.createAnalyser();
-                
-                                // Create a Gain Node to amplify the microphone signal
-                                const gainNode = audioContext.createGain();
-                                gainNode.gain.value = 5.0; 
+    dataFreq = new Uint8Array(analyser.frequencyBinCount);
+    dataTime = new Uint8Array(analyser.fftSize);
+  }
 
-                                const source = audioContext.createMediaStreamSource(stream);
-                                source.connect(gainNode);
-                                gainNode.connect(analyser);
-                
-                                // Configure analyser
-                analyser.fftSize = 256; 
-                const bufferLength = analyser.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
+  function getAudioFeatures() {
+    if (!analyser) return { bass: 0, mid: 0, treble: 0, overall: 0, wave: null, peakHz: 0 };
 
-                drawVisualizer(bufferLength);
+    analyser.getByteFrequencyData(dataFreq);
+    analyser.getByteTimeDomainData(dataTime);
 
-            } catch (err) {
-                alert("Microphone access is required for the visualizer to work.");
-                console.error("Error accessing microphone:", err);
-            }
-        });
+    const nyq = audioCtx.sampleRate / 2;
+    const bins = dataFreq.length;
 
-        let time = 0;
+    const bassEnd = Math.floor((250 / nyq) * bins);
+    const midEnd = Math.floor((2000 / nyq) * bins);
 
-                function drawVisualizer(bufferLength) {
-                    requestAnimationFrame(() => drawVisualizer(bufferLength));
+    let bassSum = 0, midSum = 0, trebSum = 0;
+    let peakVal = 0, peakIdx = 0;
 
-                    analyser.getByteFrequencyData(dataArray);
+    for (let i = 0; i < bins; i++) {
+      const v = dataFreq[i];
+      if (i < bassEnd) bassSum += v;
+      else if (i < midEnd) midSum += v;
+      else trebSum += v;
+      if (v > peakVal) { peakVal = v; peakIdx = i; }
+    }
 
-                    // Trailing effect using a semi-transparent version of your preferred #000432 color
-                    ctx.globalCompositeOperation = 'source-over';
-                    ctx.fillStyle = 'rgba(0, 4, 50, 0.35)'; 
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const bass = bassSum / (bassEnd * 255 || 1);
+    const mid = midSum / ((midEnd - bassEnd) * 255 || 1);
+    const treble = trebSum / ((bins - midEnd) * 255 || 1);
+    const overall = (bass + mid + treble) / 3;
+    const peakHz = Math.round((peakIdx / bins) * nyq);
 
-                    // Add neon glow effect with overlapping lines
-                    ctx.globalCompositeOperation = 'lighter';
+    const smooth = 0.35;
+    smoothedBass += (bass - smoothedBass) * smooth;
+    smoothedMid += (mid - smoothedMid) * smooth;
+    smoothedTreble += (treble - smoothedTreble) * smooth;
+    smoothedOverall += (overall - smoothedOverall) * smooth;
 
-                    const cx = canvas.width / 2;
-                    const cy = canvas.height / 2;
-                    time += 0.02;
+    return {
+      bass: smoothedBass,
+      mid: smoothedMid,
+      treble: smoothedTreble,
+      overall: smoothedOverall,
+      wave: dataTime,
+      peakHz
+    };
+  }
 
-                    // Get a bass value for pulsating the whole tunnel
-                    let bass = 0;
-                    for(let i = 0; i < 8; i++) bass += dataArray[i];
-                    bass = bass / 8;
-                    const bassPulse = bass / 255;
+  // ---------------------------------------------------------------------
+  // Three.js scene
+  // ---------------------------------------------------------------------
+  const stage = document.getElementById('stage');
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x08080c, 0.045);
 
-                    const numRings = 50;
-                    for (let i = numRings; i > 0; i--) {
-                        const z = i - (time % 1); 
-                        const scale = 250 / (z + 1); 
-                
-                        ctx.beginPath();
-                        const points = 90; 
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0, 8);
 
-                        for (let j = 0; j <= points; j++) {
-                            const angle = (j / points) * Math.PI * 2;
-                    
-                            // Wrap the frequency data symmetrically so the tunnel loop meets seamlessly
-                            const dataIndex = Math.floor((Math.abs(j - points/2) / (points/2)) * (bufferLength / 2.5));
-                            const audioValue = dataArray[dataIndex] || 0;
-                    
-                            // Create the wavy distortion for the tunnel walls
-                            const distortion = Math.pow((audioValue / 255), 2) * 60; 
-                            const twist = z * 0.15 + time * 0.5;
-                            const r = (35 + distortion + (bassPulse * 20)) * scale;
-                    
-                            // Flatten the y-axis a bit to give depth
-                            const x = cx + Math.cos(angle + twist) * r;
-                            const y = cy + Math.sin(angle + twist) * r * 0.8; 
-                    
-                            if (j === 0) ctx.moveTo(x, y);
-                            else ctx.lineTo(x, y);
-                        }
-                
-                        ctx.closePath();
-                
-                        // Deep Purple to Blue palette based on depth and audio
-                        const hue = 255 - (z * 2) + (bassPulse * 30); 
-                        const alpha = Math.max(0, 1 - (z / numRings)); 
-                
-                        ctx.strokeStyle = `hsla(${hue}, 100%, 65%, ${alpha})`;
-                        ctx.lineWidth = 1.5;
-                        ctx.stroke();
-                    }
-                }
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x08080c, 1);
+  stage.appendChild(renderer.domElement);
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-        });
-    </script>
+  // subtle ambient particles (the "void")
+  const dustGeo = new THREE.BufferGeometry();
+  const DUST_COUNT = 600;
+  const dustPos = new Float32Array(DUST_COUNT * 3);
+  for (let i = 0; i < DUST_COUNT; i++) {
+    const r = 12 + Math.random() * 10;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    dustPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    dustPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    dustPos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+  const dustMat = new THREE.PointsMaterial({ color: 0x2a2a3a, size: 0.05, transparent: true, opacity: 0.5 });
+  const dust = new THREE.Points(dustGeo, dustMat);
+  scene.add(dust);
 
+  // ---- ORB: icosphere with vertex displacement ----
+  const orbGroup = new THREE.Group();
+  const orbGeo = new THREE.IcosahedronGeometry(2.2, 5);
+  const orbBasePositions = orbGeo.attributes.position.array.slice();
+  const orbMat = new THREE.MeshBasicMaterial({
+    color: 0xff3d5a,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.85
+  });
+  const orbMesh = new THREE.Mesh(orbGeo, orbMat);
+  orbGroup.add(orbMesh);
+
+  // inner glow core
+  const coreGeo = new THREE.IcosahedronGeometry(0.6, 2);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  orbGroup.add(coreMesh);
+  scene.add(orbGroup);
+
+  // ---- LATTICE: grid of points that rise/fall with frequency bins ----
+  const latticeGroup = new THREE.Group();
+  const LATTICE_N = 32;
+  const latticeSpacing = 0.22;
+  const latticeGeo = new THREE.BufferGeometry();
+  const latticeCount = LATTICE_N * LATTICE_N;
+  const latticePos = new Float32Array(latticeCount * 3);
+  const latticeBase = new Float32Array(latticeCount * 3);
+  let li = 0;
+  for (let x = 0; x < LATTICE_N; x++) {
+    for (let z = 0; z < LATTICE_N; z++) {
+      const px = (x - LATTICE_N / 2) * latticeSpacing;
+      const pz = (z - LATTICE_N / 2) * latticeSpacing;
+      latticePos[li * 3] = px;
+      latticePos[li * 3 + 1] = 0;
+      latticePos[li * 3 + 2] = pz;
+      latticeBase[li * 3] = px;
+      latticeBase[li * 3 + 1] = 0;
+      latticeBase[li * 3 + 2] = pz;
+      li++;
+    }
+  }
+  latticeGeo.setAttribute('position', new THREE.BufferAttribute(latticePos, 3));
+  const latticeMat = new THREE.PointsMaterial({
+    color: 0x5df5ff,
+    size: 0.05,
+    transparent: true,
+    opacity: 0.9,
+    sizeAttenuation: true
+  });
+  const latticePoints = new THREE.Points(latticeGeo, latticeMat);
+  latticeGroup.add(latticePoints);
+  latticeGroup.visible = false;
+  scene.add(latticeGroup);
+
+  // ---- STRANDS: radiating waveform tendrils ----
+  const strandsGroup = new THREE.Group();
+  const STRAND_COUNT = 48;
+  const STRAND_SEGMENTS = 64;
+  const strandLines = [];
+  const strandBaseDirs = [];
+  for (let s = 0; s < STRAND_COUNT; s++) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array((STRAND_SEGMENTS + 1) * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const hue = s / STRAND_COUNT;
+    const color = new THREE.Color().setHSL(0.95 - hue * 0.55, 0.8, 0.6);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 });
+    const line = new THREE.Line(geo, mat);
+    strandsGroup.add(line);
+    strandLines.push(line);
+
+    const theta = (s / STRAND_COUNT) * Math.PI * 2;
+    strandBaseDirs.push(new THREE.Vector3(Math.cos(theta), Math.sin(theta * 1.3) * 0.4, Math.sin(theta)));
+  }
+  strandsGroup.visible = false;
+  scene.add(strandsGroup);
+
+  // ---------------------------------------------------------------------
+  // Interaction: drag to rotate, tap buttons to switch forms
+  // ---------------------------------------------------------------------
+  let mode = 'orb';
+  let rotY = 0, rotX = 0;
+  let targetRotY = 0, targetRotX = 0;
+  let dragging = false;
+  let lastX = 0, lastY = 0;
+  let autoRotate = true;
+
+  function setMode(next) {
+    mode = next;
+    orbGroup.visible = mode === 'orb';
+    latticeGroup.visible = mode === 'lattice';
+    strandsGroup.visible = mode === 'strands';
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+  }
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+
+  function onPointerDown(x, y) {
+    dragging = true;
+    autoRotate = false;
+    lastX = x; lastY = y;
+  }
+  function onPointerMove(x, y) {
+    if (!dragging) return;
+    const dx = x - lastX;
+    const dy = y - lastY;
+    targetRotY += dx * 0.005;
+    targetRotX += dy * 0.005;
+    targetRotX = Math.max(-0.9, Math.min(0.9, targetRotX));
+    lastX = x; lastY = y;
+  }
+  function onPointerUp() { dragging = false; }
+
+  renderer.domElement.addEventListener('touchstart', e => {
+    if (e.target.closest('.controls')) return;
+    onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchmove', e => {
+    onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', onPointerUp);
+
+  renderer.domElement.addEventListener('mousedown', e => onPointerDown(e.clientX, e.clientY));
+  window.addEventListener('mousemove', e => onPointerMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', onPointerUp);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---------------------------------------------------------------------
+  // Animation loop
+  // ---------------------------------------------------------------------
+  const clock = new THREE.Clock();
+  const rGain = document.getElementById('r-gain');
+  const rPeak = document.getElementById('r-peak');
+  const hint = document.getElementById('hint');
+  let hintTimer = null;
+
+  function colorForEnergy(bass, mid, treble) {
+    // blend ember (bass) -> plasma (mid) -> white (treble)
+    const c = new THREE.Color();
+    const emberC = new THREE.Color(0xff3d5a);
+    const plasmaC = new THREE.Color(0x5df5ff);
+    const whiteC = new THREE.Color(0xffffff);
+    const total = bass + mid + treble + 0.0001;
+    c.set(0x000000);
+    c.add(emberC.clone().multiplyScalar(bass / total));
+    c.add(plasmaC.clone().multiplyScalar(mid / total));
+    c.add(whiteC.clone().multiplyScalar(treble / total));
+    return c;
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    const dt = clock.getDelta();
+
+    const feat = getAudioFeatures();
+    const { bass, mid, treble, overall, wave, peakHz } = feat;
+
+    rGain.textContent = overall.toFixed(2);
+    rPeak.textContent = peakHz + ' Hz';
+
+    if (autoRotate) {
+      targetRotY += dt * 0.08;
+    }
+    rotY += (targetRotY - rotY) * 0.08;
+    rotX += (targetRotX - rotX) * 0.08;
+
+    const energyColor = colorForEnergy(bass, mid, treble);
+
+    // ---- ORB ----
+    if (mode === 'orb') {
+      orbGroup.rotation.y = rotY;
+      orbGroup.rotation.x = rotX;
+
+      const posAttr = orbGeo.attributes.position;
+      const arr = posAttr.array;
+      for (let i = 0; i < arr.length; i += 3) {
+        const bx = orbBasePositions[i], by = orbBasePositions[i + 1], bz = orbBasePositions[i + 2];
+        const len = Math.sqrt(bx * bx + by * by + bz * bz) || 1;
+        const nx = bx / len, ny = by / len, nz = bz / len;
+
+        let waveVal = 0;
+        if (wave) {
+          const idx = Math.floor(((nx + 1) / 2) * (wave.length - 1));
+          waveVal = (wave[idx] - 128) / 128;
+        }
+
+        const noise = Math.sin(nx * 4 + t * 1.5) * Math.cos(ny * 4 + t) * Math.sin(nz * 4 + t * 0.7);
+        const displacement = 1
+          + bass * 0.9 * (0.6 + 0.4 * Math.sin(t * 2 + nx * 3))
+          + mid * 0.35 * noise
+          + treble * 0.5 * waveVal
+          + overall * 0.15;
+
+        arr[i] = nx * len * displacement;
+        arr[i + 1] = ny * len * displacement;
+        arr[i + 2] = nz * len * displacement;
+      }
+      posAttr.needsUpdate = true;
+
+      orbMat.color.copy(energyColor);
+      const coreScale = 1 + overall * 3.5 + bass * 1.5;
+      coreMesh.scale.setScalar(coreScale);
+      coreMat.opacity = 0.6 + treble * 0.4;
+    }
+
+    // ---- LATTICE ----
+    if (mode === 'lattice') {
+      latticeGroup.rotation.y = rotY * 0.5;
+      latticeGroup.rotation.x = rotX * 0.5 - 0.3;
+
+      const posAttr = latticeGeo.attributes.position;
+      const arr = posAttr.array;
+      const bins = dataFreq ? dataFreq.length : 0;
+      for (let x = 0; x < LATTICE_N; x++) {
+        for (let z = 0; z < LATTICE_N; z++) {
+          const idx = x * LATTICE_N + z;
+          const bx = latticeBase[idx * 3];
+          const bz = latticeBase[idx * 3 + 2];
+          const dist = Math.sqrt(bx * bx + bz * bz);
+          let freqVal = 0;
+          if (dataFreq && bins) {
+            const bin = Math.min(bins - 1, Math.floor((dist / 3.5) * bins * 0.6));
+            freqVal = dataFreq[bin] / 255;
+          }
+          const wave = Math.sin(dist * 2 - t * 3) * 0.15;
+          arr[idx * 3 + 1] = freqVal * 2.4 + wave * overall * 2 + bass * Math.sin(t * 2 + dist);
+        }
+      }
+      posAttr.needsUpdate = true;
+      latticeMat.color.copy(energyColor);
+      latticeMat.size = 0.05 + overall * 0.08;
+    }
+
+    // ---- STRANDS ----
+    if (mode === 'strands') {
+      strandsGroup.rotation.y = rotY;
+      strandsGroup.rotation.x = rotX;
+
+      for (let s = 0; s < STRAND_COUNT; s++) {
+        const line = strandLines[s];
+        const posAttr = line.geometry.attributes.position;
+        const arr = posAttr.array;
+        const dir = strandBaseDirs[s];
+
+        for (let seg = 0; seg <= STRAND_SEGMENTS; seg++) {
+          const f = seg / STRAND_SEGMENTS;
+          let waveVal = 0;
+          if (dataTime) {
+            const idx = Math.floor(f * (dataTime.length - 1));
+            waveVal = (dataTime[idx] - 128) / 128;
+          }
+          const radius = f * (3.2 + bass * 2.5);
+          const wob = Math.sin(f * 10 + t * 3 + s) * mid * 0.6;
+          const spread = waveVal * treble * 1.2;
+
+          const x = dir.x * radius + wob * Math.cos(t + s);
+          const y = dir.y * radius + spread + Math.sin(t * 2 + f * 6 + s) * overall * 0.5;
+          const z = dir.z * radius + wob * Math.sin(t + s);
+
+          arr[seg * 3] = x;
+          arr[seg * 3 + 1] = y;
+          arr[seg * 3 + 2] = z;
+        }
+        posAttr.needsUpdate = true;
+        line.material.color.copy(energyColor).lerp(new THREE.Color(0xffffff), 0.15 * (s / STRAND_COUNT));
+        line.material.opacity = 0.35 + overall * 0.5;
+      }
+    }
+
+    // dust drifts slowly, brightens with overall energy
+    dust.rotation.y = t * 0.01;
+    dustMat.opacity = 0.3 + overall * 0.4;
+
+    camera.position.x = Math.sin(t * 0.05) * 0.3;
+    camera.lookAt(0, 0, 0);
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+  // ---------------------------------------------------------------------
+  // Gate / permission flow
+  // ---------------------------------------------------------------------
+  const gate = document.getElementById('gate');
+  const enableBtn = document.getElementById('enable');
+  const gateError = document.getElementById('gate-error');
+  const rState = document.getElementById('r-state');
+
+  enableBtn.addEventListener('click', async () => {
+    enableBtn.textContent = 'Connecting…';
+    try {
+      await initAudio();
+      gate.classList.add('hidden');
+      rState.textContent = 'LIVE';
+      clearTimeout(hintTimer);
+      hint.style.opacity = '0.7';
+      hintTimer = setTimeout(() => { hint.style.transition = 'opacity 1.5s'; hint.style.opacity = '0'; }, 5000);
+    } catch (err) {
+      gateError.textContent = 'Microphone access was blocked. Check your browser/site permissions for microphone, then try again.';
+      gateError.classList.add('show');
+      enableBtn.textContent = 'Begin Listening';
+      rState.textContent = 'NO SIGNAL';
+    }
+  });
+})();
+</script>
 </body>
 </html>
