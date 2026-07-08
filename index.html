@@ -103,34 +103,70 @@
             }
         });
 
-        function drawVisualizer(bufferLength) {
-            requestAnimationFrame(() => drawVisualizer(bufferLength));
+        let time = 0;
 
-            analyser.getByteFrequencyData(dataArray);
+                function drawVisualizer(bufferLength) {
+                    requestAnimationFrame(() => drawVisualizer(bufferLength));
 
-            ctx.fillStyle = '#000432';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    analyser.getByteFrequencyData(dataArray);
 
-            const barWidth = (canvas.width / bufferLength) * 2.5;
-            let barHeight;
-            let x = 0;
+                    // Trailing effect using a semi-transparent version of your preferred #000432 color
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.fillStyle = 'rgba(0, 4, 50, 0.35)'; 
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            for (let i = 0; i < bufferLength; i++) {
-                barHeight = dataArray[i];
+                    // Add neon glow effect with overlapping lines
+                    ctx.globalCompositeOperation = 'lighter';
 
-                // Create a blue to deep purple gradient effect based on height
-                const r = barHeight + (25 * (i/bufferLength));
-                const g = 50;
-                const b = 200 + (55 * (i/bufferLength));
+                    const cx = canvas.width / 2;
+                    const cy = canvas.height / 2;
+                    time += 0.02;
 
-                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    // Get a bass value for pulsating the whole tunnel
+                    let bass = 0;
+                    for(let i = 0; i < 8; i++) bass += dataArray[i];
+                    bass = bass / 8;
+                    const bassPulse = bass / 255;
+
+                    const numRings = 50;
+                    for (let i = numRings; i > 0; i--) {
+                        const z = i - (time % 1); 
+                        const scale = 250 / (z + 1); 
                 
-                // Draw the bar centered vertically
-                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        ctx.beginPath();
+                        const points = 90; 
 
-                x += barWidth + 1;
-            }
-        }
+                        for (let j = 0; j <= points; j++) {
+                            const angle = (j / points) * Math.PI * 2;
+                    
+                            // Wrap the frequency data symmetrically so the tunnel loop meets seamlessly
+                            const dataIndex = Math.floor((Math.abs(j - points/2) / (points/2)) * (bufferLength / 2.5));
+                            const audioValue = dataArray[dataIndex] || 0;
+                    
+                            // Create the wavy distortion for the tunnel walls
+                            const distortion = Math.pow((audioValue / 255), 2) * 60; 
+                            const twist = z * 0.15 + time * 0.5;
+                            const r = (35 + distortion + (bassPulse * 20)) * scale;
+                    
+                            // Flatten the y-axis a bit to give depth
+                            const x = cx + Math.cos(angle + twist) * r;
+                            const y = cy + Math.sin(angle + twist) * r * 0.8; 
+                    
+                            if (j === 0) ctx.moveTo(x, y);
+                            else ctx.lineTo(x, y);
+                        }
+                
+                        ctx.closePath();
+                
+                        // Deep Purple to Blue palette based on depth and audio
+                        const hue = 255 - (z * 2) + (bassPulse * 30); 
+                        const alpha = Math.max(0, 1 - (z / numRings)); 
+                
+                        ctx.strokeStyle = `hsla(${hue}, 100%, 65%, ${alpha})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
+                }
 
         // Handle window resize
         window.addEventListener('resize', () => {
