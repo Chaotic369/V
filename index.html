@@ -74,13 +74,18 @@
                 startBtn.style.display = 'none';
 
                 // Initialize Audio Context (must be done after a user gesture like a click)
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
+                                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                                analyser = audioContext.createAnalyser();
                 
-                const source = audioContext.createMediaStreamSource(stream);
-                source.connect(analyser);
+                                // Create a Gain Node to amplify the microphone signal
+                                const gainNode = audioContext.createGain();
+                                gainNode.gain.value = 5.0; 
+
+                                const source = audioContext.createMediaStreamSource(stream);
+                                source.connect(gainNode);
+                                gainNode.connect(analyser);
                 
-                // Configure analyser
+                                // Configure analyser
                 analyser.fftSize = 256; 
                 const bufferLength = analyser.frequencyBinCount;
                 dataArray = new Uint8Array(bufferLength);
